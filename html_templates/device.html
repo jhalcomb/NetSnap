@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ d.hostname }}</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 30px;
+            background-color: #f5f5f5;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        details {
+            background-color: white;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            overflow: hidden;
+        }
+
+        summary {
+            font-family: Consolas, "Courier New", monospace;
+            font-weight: bold;
+            cursor: pointer;
+            padding: 12px;
+            background-color: #e9ecef;
+        }
+
+        summary:hover {
+            background-color: #dfe3e6;
+        }
+
+        pre {
+            margin: 0;
+            padding: 15px;
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 14px;
+            overflow-x: auto;
+            white-space: pre;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-bottom: 15px;
+            color: #0066cc;
+            text-decoration: none;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+
+    </style>
+</head>
+
+<body>
+
+<a href="index.html" class="back-link">← Back to Device Index</a>
+
+<h1>{{ d.hostname }}</h1>
+
+<table style="margin-bottom:20px;">
+    <tr>
+        <td><strong>IP Address:</strong></td>
+        <td>{{ d.ip }}</td>
+    </tr>
+    <tr>
+        <td><strong>Platform:</strong></td>
+        <td>{{ d.platform }}</td>
+    </tr>
+    <tr>
+        <td><strong>OS Type:</strong></td>
+        <td>{{ d.os_type }}</td>
+    </tr>
+    <tr>
+        <td><strong>Serial Number:</strong></td>
+        <td>{{ d.serial }}</td>
+    </tr>
+    <tr>
+        <td><strong>Inventory Source:</strong></td>
+        <td>{{ d.source }}</td>
+    </tr>
+</table>
+
+{% for result in d.command_results %}
+
+<details>
+    <summary>{{ result.command }}</summary>
+
+    {% if result.output %}
+        <pre>{{ result.output }}</pre>
+    {% else %}
+        <pre>No output returned.</pre>
+    {% endif %}
+</details>
+
+{% endfor %}
+
+</body>
+</html>

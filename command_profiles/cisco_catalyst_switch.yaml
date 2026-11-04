@@ -1,0 +1,10 @@
+commands:
+  - show version
+  - show switch
+  - show inventory
+  - show ip interface brief
+  - show cdp neighbors
+  - show interface status
+  - show spanning-tree summary
+  - show etherchannel summary
+  - show logging last 20

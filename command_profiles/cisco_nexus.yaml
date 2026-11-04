@@ -1,0 +1,9 @@
+commands:
+  - show version
+  - show inventory
+  - show interface brief
+  - show port-channel summary
+  - show vpc
+  - show cdp neighbors
+  - show spanning-tree summary
+  - show logging last 20

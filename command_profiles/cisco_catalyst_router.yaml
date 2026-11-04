@@ -1,0 +1,9 @@
+commands:
+  - show version
+  - show inventory
+  - show ip interface brief
+  - show ip route
+  - show ip arp
+  - show ip ospf neighbor
+  - show ip bgp summary
+  - show logging last 20
