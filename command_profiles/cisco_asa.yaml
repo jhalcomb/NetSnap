@@ -1,0 +1,6 @@
+# Cisco ASA CLI (traditional ASA image), read-only operational commands.
+commands:
+  - show version
+  - show interface ip brief
+  - show route
+  - show failover

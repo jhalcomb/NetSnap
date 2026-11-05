@@ -1,0 +1,7 @@
+# FTD top-level CLI (not the ASA diagnostic CLI).
+# Avoid system support diagnostic-cli for the initial implementation.
+commands:
+  - show version
+  - show network
+  - show managers
+  - show time

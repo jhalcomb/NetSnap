@@ -21,7 +21,7 @@ from report_builder.html import (
     create_toc,
 )
 from command_profiles import load_profile
-from platform_detection import detect_platform
+from platform_detection import DeviceSkipped, detect_platform
 
 STOP_EVENT = Event()
 
@@ -102,17 +102,12 @@ def process_device(
     if STOP_EVENT.is_set():
         return None
 
-    if not device.ip:
-        raise ValueError(
-            f"{device.hostname} has no IP"
-        )
-
-    print(
-        f"Starting {device.hostname}"
-    )
-
-
     platform_info = detect_platform(device)
+
+    if not device.ip:
+        raise ValueError(f"{device.hostname} has no management IP")
+
+    print(f"Starting {device.hostname}")
     device.detected_os = platform_info.os_family
     device.detected_role = platform_info.role
     device.netmiko_driver = platform_info.netmiko_type
@@ -175,12 +170,14 @@ def collect_device_outputs(
     processed_count = 0
     successful = []
     failed = []
-    filenames = []
+    successful_reports = []
+    skipped = []
 
     create_toc(
         output_path,
-        filenames,
+        successful_reports,
         failed,
+        skipped,
         total_devices,
         processed_count,
     )
@@ -222,9 +219,11 @@ def collect_device_outputs(
 
                 if filename:
 
-                    filenames.append(
-                        filename
-                    )
+                    successful_reports.append({
+                        "filename": filename,
+                        "hostname": device.hostname,
+                        "ip": device.ip,
+                    })
 
                     successful.append(
                         device.hostname
@@ -234,6 +233,18 @@ def collect_device_outputs(
                         f"[OK] "
                         f"{device.hostname}"
                     )
+
+            except DeviceSkipped as error:
+
+                skipped.append({
+                    "hostname": device.hostname,
+                    "ip": device.ip,
+                    "platform": device.platform,
+                    "os_type": device.os_type,
+                    "source": device.source,
+                    "reason": str(error),
+                })
+                print(f"[SKIP] {device.hostname}: {error}")
 
             except NetmikoAuthenticationException:
 
@@ -288,8 +299,9 @@ def collect_device_outputs(
 
             create_toc(
                 output_path,
-                filenames,
+                successful_reports,
                 failed,
+                skipped,
                 total_devices,
                 processed_count,
             )
@@ -324,8 +336,9 @@ def collect_device_outputs(
 
         create_toc(
             output_path,
-            filenames,
+            successful_reports,
             failed,
+            skipped,
             total_devices,
             processed_count,
         )
@@ -345,10 +358,8 @@ def collect_device_outputs(
             f"{len(successful)}"
         )
 
-        print(
-            f"Failed: "
-            f"{len(failed)}"
-        )
+        print(f"Failed: {len(failed)}")
+        print(f"Skipped: {len(skipped)}")
 
         print()
         print(
@@ -359,5 +370,6 @@ def collect_device_outputs(
     return {
         "successful": successful,
         "failed": failed,
+        "skipped": skipped,
         "output_path": output_path,
     }

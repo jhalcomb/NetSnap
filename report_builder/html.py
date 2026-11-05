@@ -1,6 +1,7 @@
 from jinja2 import Environment, FileSystemLoader
 from pathlib import Path
 from models import Device
+import hashlib
 import re
 
 
@@ -34,7 +35,11 @@ def create_device_html(
 ) -> str:
     """Create the HTML report for one device."""
 
-    filename = f"{safe_filename(device.hostname)}.html"
+    # Use identity rather than hostname alone: SolarWinds can return two
+    # different devices with identical names (e.g. ASA HA peers).
+    identity = f"{device.source}|{device.hostname.lower()}|{device.ip or ''}"
+    suffix = hashlib.sha256(identity.encode('utf-8')).hexdigest()[:10]
+    filename = f"{safe_filename(device.hostname)[:110]}_{suffix}.html"
 
     output_file = output_path / filename
 
@@ -51,21 +56,22 @@ def create_device_html(
 
 def create_toc(
     output_path: Path,
-    filenames: list[str],
+    successful_devices: list[dict],
     failed_devices: list[dict],
+    skipped_devices: list[dict],
     total_devices: int,
     processed_count: int,
 ) -> Path:
     """Create or update the table-of-contents page."""
 
-    filenames = sorted(
-        filenames,
-        key=str.lower,
+    successful_devices = sorted(
+        successful_devices, key=lambda d: (d["hostname"].lower(), d["ip"] or "")
     )
 
     content = toc_template.render(
-        filenames=filenames,
-        failed_devices=failed_devices,
+        successful_devices=successful_devices,
+        failed_devices=sorted(failed_devices, key=lambda d: d["hostname"].lower()),
+        skipped_devices=sorted(skipped_devices, key=lambda d: d["hostname"].lower()),
         total_devices=total_devices,
         processed_count=processed_count,
     )

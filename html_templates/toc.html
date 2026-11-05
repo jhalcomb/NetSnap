@@ -95,6 +95,15 @@
             color: #990000;
         }
 
+        .skipped-device {
+            background-color: #fff2df;
+            border: 1px solid #d48724;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            padding: 12px 15px;
+            color: #915409;
+        }
+
         .error-details {
             margin-top: 5px;
             font-size: 12px;
@@ -137,13 +146,18 @@
         <div>
             Successful:
             <span id="visible-count">
-                {{ filenames | length }}
+                {{ successful_devices | length }}
             </span>
         </div>
 
         <div>
             Failed:
-            {{ failed_devices | length }}
+            <span id="failed-count">{{ failed_devices | length }}</span>
+        </div>
+
+        <div>
+            Skipped:
+            <span id="skipped-count">{{ skipped_devices | length }}</span>
         </div>
 
         <div>
@@ -163,14 +177,13 @@
 
     <div id="device-list">
 
-        {% for filename in filenames %}
+        {% for device in successful_devices %}
 
-        <a
-            class="device-link"
-            href="{{ filename }}">
-
-            {{ filename | replace('.html', '') }}
-
+        <a class="device-link" href="{{ device.filename }}"
+           data-hostname="{{ device.hostname|lower }}"
+           data-ip="{{ device.ip or '' }}">
+            {{ device.hostname }}
+            {% if device.ip %} ({{ device.ip }}) {% endif %}
         </a>
 
         {% endfor %}
@@ -211,6 +224,31 @@
 
     {% endif %}
 
+    {% if skipped_devices %}
+
+    <h2>Skipped Devices</h2>
+    <div id="skipped-list">
+
+        {% for device in skipped_devices %}
+        <div class="skipped-device" data-hostname="{{ device.hostname|lower }}"
+             data-ip="{{ device.ip or '' }}">
+            <strong>{{ device.hostname }}</strong>
+            {% if device.ip %} ({{ device.ip }}) {% endif %}
+            <div class="error-details">
+                Platform: {{ device.platform }}
+                {% if device.os_type %}
+                <br>Software/Image: {{ device.os_type }}
+                {% endif %}
+                {% if device.source %}
+                <br>Inventory: {{ device.source }}
+                {% endif %}
+                <br>Reason: {{ device.reason }}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
     <div id="no-results">
         No matching devices found.
     </div>
@@ -222,63 +260,37 @@
 const searchBox = document.getElementById("search");
 const deviceLinks = document.querySelectorAll(".device-link");
 const failedDevices = document.querySelectorAll(".failed-device");
+const skippedDevices = document.querySelectorAll(".skipped-device");
+const failedCount = document.getElementById("failed-count");
+const skippedCount = document.getElementById("skipped-count");
 
 const visibleCount = document.getElementById("visible-count");
 const noResults = document.getElementById("no-results");
 
 searchBox.addEventListener("input", function () {
+    const searchText = this.value.toLowerCase().trim();
 
-    const searchText = this.value
-        .toLowerCase()
-        .trim();
+    function filterItems(items) {
+        let count = 0;
+        items.forEach(function (item) {
+            const label = ((item.dataset.hostname || "") + " " +
+                           (item.dataset.ip || "") + " " +
+                           item.textContent).toLowerCase();
+            const visible = label.includes(searchText);
+            item.style.display = visible ? "" : "none";
+            if (visible) count++;
+        });
+        return count;
+    }
 
-    let matches = 0;
-
-    deviceLinks.forEach(function (link) {
-
-        const name = link.textContent
-            .toLowerCase();
-
-        const visible = name.includes(
-            searchText
-        );
-
-        link.style.display =
-            visible ? "block" : "none";
-
-        if (visible) {
-            matches++;
-        }
-
-    });
-
-    failedDevices.forEach(function (device) {
-
-        const name =
-            device.dataset.hostname;
-
-        const visible =
-            name.includes(searchText);
-
-        device.style.display =
-            visible ? "block" : "none";
-
-        if (visible) {
-            matches++;
-        }
-
-    });
-
-    visibleCount.textContent =
-        document.querySelectorAll(
-            ".device-link:not([style*='none'])"
-        ).length;
-
-    noResults.style.display =
-        matches === 0
-        ? "block"
-        : "none";
-
+    const success = filterItems(deviceLinks);
+    const failed = filterItems(failedDevices);
+    const skipped = filterItems(skippedDevices);
+    visibleCount.textContent = success;
+    failedCount.textContent = failed;
+    skippedCount.textContent = skipped;
+    noResults.style.display = (success + failed + skipped === 0)
+        ? "block" : "none";
 });
 
 </script>

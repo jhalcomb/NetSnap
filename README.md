@@ -19,7 +19,7 @@ NetSnap is a Python-based network data collection and reporting tool that retrie
   - Per-device report pages
   - Collapsible command output sections
   - Collection progress tracking
-  - Failed device reporting
+  - Successful, failed, and skipped device reporting
 
 - Error handling
   - Authentication failures
@@ -37,7 +37,7 @@ inventory/
 ├── catalyst_center.py
 └── solarwinds.py
 
-report_generators/
+report_builder/
 └── html.py
 
 html_templates/
@@ -125,9 +125,9 @@ NetSnap centralizes platform detection in `platform_detection.py`. Every invento
 provider populates the `Device` model with the available platform, software,
 and role metadata. `detect_platform(device)` returns:
 
-- `os_family`: `ios`, `iosxe`, `nxos`, or `iosxr`
+- `os_family`: `ios`, `iosxe`, `nxos`, `iosxr`, `asa`, or `ftd`
 - `netmiko_type`: SSH driver chosen **only** by the OS
-- `role`: `router`, `switch`, or `unknown`, chosen from the inventory role,
+- `role`: `router`, `switch`, `firewall`, or `unknown`, chosen from the inventory role,
   otherwise a conservative model-name heuristic
 - `command_profile`: the OS-specific YAML file
 
@@ -135,8 +135,8 @@ Commands are defined under `commands:` (always collected) and optional
 `role_commands.router:` / `role_commands.switch:` groups in the same YAML file.
 When role is unknown, NetSnap still runs common commands such as `show ip route`.
 Detected OS, role, and driver are also shown in each device HTML report.
-Missing OS information still causes a clear error rather than an unsafe driver
-fallback. An inventory's category is preferred over role guesses from the model.
+Missing OS information is classified as Skipped (unsupported) rather than
+assuming a potentially incorrect driver. An inventory's category is preferred over role guesses from the model.
 
 Catalyst Center supplies `family`, `softwareType`, and `platformId`. SolarWinds
 supplies `MachineType`, `IOSImage`, and `Description`; a model heuristic can fill
@@ -154,17 +154,17 @@ python -m unittest discover -s tests -v
 Reports are written to:
 
 ```text
-reports/
-└── 2026-11-04_16-30-00/
+SCRIPT_OUTPUTS/
+└── YYYY-MM-DD_HH-MM-SS/
 ```
 
 Each report directory contains:
 
 ```text
 index.html
-Switch01.html
-Switch02.html
-Router01.html
+Switch01_abcd123456.html
+Switch02_123456abcd.html
+Router01_abcdef1234.html
 ```
 
 Open:
@@ -175,9 +175,10 @@ index.html
 
 to browse the report set.
 
-## Failed Devices
+## Failed and Skipped Devices
 
-NetSnap tracks devices that could not be collected and includes them in the report.
+NetSnap tracks attempted-but-failed devices separately from inventory records
+that are intentionally excluded or have unsupported platforms.
 
 Examples:
 
@@ -234,19 +235,33 @@ Possible enhancements:
 
 MIT License
 
-## Platform detection (OS-only)
+## ASA/FTD and Skipped devices
 
-NetSnap resolves the network operating system from inventory metadata or a
-known model family. This selects the Netmiko driver and one command profile
-per OS; router/switch roles do **not** influence command selection.
+The central platform detector supports `asa` (`cisco_asa`) and `ftd`
+(`cisco_ftd`) using separate read-only YAML command profiles:
 
-| OS | Netmiko driver | Command profile |
-|---|---|---|
-| IOS / IOS XE | `cisco_ios` | `cisco_ios.yaml` |
-| NX-OS | `cisco_nxos` | `cisco_nexus.yaml` |
-| IOS XR | `cisco_xr` | `cisco_iosxr.yaml` |
+- `command_profiles/cisco_asa.yaml` — `show version`, `show interface ip brief`,
+  `show route`, `show failover`.
+- `command_profiles/cisco_ftd.yaml` — `show version`, `show network`,
+  `show managers`, `show time` from **FTD's top-level CLI**.
 
-The IOS/IOS XE profile intentionally includes routing and switching commands.
-Some commands may be unsupported on a particular device and return CLI error
-text; this is not a connection failure. Unknown platforms are rejected rather
-than silently assumed to be IOS.
+**Important:** A Firepower 1010/2130 model alone does not tell you whether
+ASA or FTD software is installed. `platform_detection.FIREPOWER_DEFAULT_OS`
+is set to `"ftd"` for convenience with SolarWinds records that provide only
+`MachineType`. If that assumption is unsafe in your inventory, change it to
+`None` to skip ambiguous hardware. Explicit `os_type="ASA"` or `"FTD"`
+from the inventory overrides the hardware fallback. For ASA-imaged
+Firepower hardware, supply the explicit OS to avoid a wrong Netmiko driver.
+
+Skipped inventory records are listed **in orange at the bottom of the report**
+with hostname, IP, platform, and reason. Deliberately excluded categories:
+UCS, CUCM/Call Manager, VG/voice gateways, APIC, MCU; other unknown platforms
+are also skipped instead of reported as SSH failures. A detected supported
+platform that fails SSH/authentication/command collection is **Failed**.
+
+Each successful report filename includes a stable hash of its hostname/IP/source,
+so two devices that share a hostname do not overwrite each other's HTML files.
+
+After collection, totals are: `successful + failed + skipped = processed`.
+
+Run offline tests with `python -m unittest discover -s tests -v`.

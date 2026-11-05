@@ -2,7 +2,7 @@
 import unittest
 
 from models import Device
-from platform_detection import detect_platform
+from platform_detection import DeviceSkipped, detect_platform
 from command_profiles import load_profile, get_commands_for_device
 
 
@@ -84,9 +84,6 @@ class PlatformDetectionTests(unittest.TestCase):
             ("Cisco Catalyst C8300-1N1S-4T2X", "X86_64_LINUX_IOSD-UNIVERSALK9-M", "iosxe", "router"),
             ("Cisco 4431 ISR", "X86_64_LINUX_IOSD-UNIVERSALK9-M", "iosxe", "router"),
             ("Cisco 4331 ISR", "X86_64_LINUX_IOSD-UNIVERSALK9-M", "iosxe", "router"),
-            ("VG310", "VG3X0-UNIVERSALK9-M", "ios", "unknown"),
-            ("VG350", "VG350-UNIVERSALK9-M", "ios", "unknown"),
-            ("Cisco VG450 Analog Voice Gateway", "X86_64_LINUX_IOSD-UNIVERSALK9-M", "iosxe", "unknown"),
         ]
         for model, image, expected_os, expected_role in cases:
             with self.subTest(model=model):
@@ -95,22 +92,57 @@ class PlatformDetectionTests(unittest.TestCase):
                 self.assertEqual(info.role, expected_role)
                 self.assertEqual(info.netmiko_type, "cisco_ios")
 
-    def test_other_appliances_do_not_get_a_false_ios_match(self):
-        # SolarWinds also inventories management servers and security appliances.
-        for model in ("Cisco Unified Communications Manager", "APIC Server M2",
-                      "Cisco FirePOWER 1010 Security Appliance", "Firepower 2130",
-                      "Cisco ASA 5505", "Cisco MCU 4505"):
+    def test_intentionally_skipped_devices(self):
+        examples = [
+            ("Cisco UCS C240 M5", "UCS"),
+            ("Cisco Unified Communications Manager", "Call Manager"),
+            ("APIC Server M2", "APIC"),
+            ("Cisco MCU 4505", "MCU"),
+            ("VG310", "voice gateway"),
+            ("VG350", "voice gateway"),
+            ("Cisco VG450 Analog Voice Gateway", "voice gateway"),
+        ]
+        for model, reason in examples:
             with self.subTest(model=model):
-                with self.assertRaisesRegex(ValueError, "Cannot detect OS"):
-                    detect_platform(dev("NotIOS", model))
+                with self.assertRaisesRegex(DeviceSkipped, reason):
+                    # Even an IOS image shouldn't override explicit exclusions.
+                    detect_platform(dev("Device", model, "IOS XE"))
 
-    def test_unknown_os_fails_instead_of_guessing(self):
+    def test_asa_and_ftd_supported(self):
+        examples = [
+            ("Cisco ASA 5505", None, "asa", "cisco_asa"),
+            ("Cisco ASA 5512-X", None, "asa", "cisco_asa"),
+            ("Firepower 2130", None, "ftd", "cisco_ftd"),
+            ("Cisco FirePOWER 1010 Security Appliance", None, "ftd", "cisco_ftd"),
+            ("Firepower 2130", "ASA", "asa", "cisco_asa"),
+            ("Firepower 2130", "FTD", "ftd", "cisco_ftd"),
+            ("Cisco ASA 5512-X", "FTD", "ftd", "cisco_ftd"),
+        ]
+        for model, os_type, expected_os, expected_driver in examples:
+            with self.subTest(model=model, os_type=os_type):
+                result = detect_platform(dev("FW", model, os_type))
+                self.assertEqual(result.os_family, expected_os)
+                self.assertEqual(result.netmiko_type, expected_driver)
+                self.assertEqual(result.command_profile, f"cisco_{expected_os}")
+                self.assertEqual(result.role, "firewall")
+
+        self.assertIn("show route", load_profile("cisco_asa", "firewall"))
+        self.assertIn("show network", load_profile("cisco_ftd", "firewall"))
+        self.assertNotIn("system support diagnostic-cli", load_profile("cisco_ftd", "firewall"))
+
+    def test_ambiguous_firepower_can_be_skipped(self):
+        from unittest.mock import patch
+        with patch("platform_detection.FIREPOWER_DEFAULT_OS", None):
+            with self.assertRaisesRegex(DeviceSkipped, "ambiguous"):
+                detect_platform(dev("FW", "Firepower 2130"))
+
+    def test_unknown_os_skipped_not_failed(self):
         device = dev("Unknown", "Mystery 123")
-        with self.assertRaisesRegex(ValueError, "Cannot detect OS"):
+        with self.assertRaisesRegex(DeviceSkipped, "Unsupported"):
             detect_platform(device)
 
     def test_profiles_for_all_platforms(self):
-        for name in ("cisco_ios", "cisco_nexus", "cisco_iosxr"):
+        for name in ("cisco_ios", "cisco_nexus", "cisco_iosxr", "cisco_asa", "cisco_ftd"):
             for role in ("router", "switch", "unknown"):
                 with self.subTest(profile=name, role=role):
                     self.assertTrue(load_profile(name, role))

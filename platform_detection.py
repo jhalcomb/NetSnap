@@ -15,7 +15,17 @@ class PlatformInfo:
     os_family: str
     netmiko_type: str
     command_profile: str
-    role: str  # "router", "switch", or "unknown"
+    role: str  # "router", "switch", "firewall", or "unknown"
+
+
+class DeviceSkipped(Exception):
+    """Inventory record intentionally not collected over SSH."""
+
+
+# SolarWinds often provides only the chassis model for Firepower hardware.
+# Firepower hardware can run ASA or FTD. Change to None if you prefer to
+# skip ambiguous Firepower devices instead of assuming FTD.
+FIREPOWER_DEFAULT_OS: str | None = "ftd"
 
 
 NETMIKO_DRIVERS = {
@@ -23,6 +33,8 @@ NETMIKO_DRIVERS = {
     "iosxe": "cisco_ios",
     "nxos": "cisco_nxos",
     "iosxr": "cisco_xr",
+    "asa": "cisco_asa",
+    "ftd": "cisco_ftd",
 }
 
 COMMAND_PROFILES = {
@@ -30,6 +42,8 @@ COMMAND_PROFILES = {
     "iosxe": "cisco_ios",
     "nxos": "cisco_nexus",
     "iosxr": "cisco_iosxr",
+    "asa": "cisco_asa",
+    "ftd": "cisco_ftd",
 }
 
 
@@ -39,6 +53,10 @@ def _normalize(value: str | None) -> str:
 
 def _os_from_software(value: str | None) -> str | None:
     text = _normalize(value)
+    if re.search(r"\b(?:firepower threat defense|ftd|threat defense)\b", text):
+        return "ftd"
+    if re.search(r"\b(?:adaptive security appliance|asa)\b", text):
+        return "asa"
     if re.search(r"\b(?:nx\s*os|nxos)\b", text):
         return "nxos"
     if re.search(r"\b(?:ios\s*xr|iosxr)\b", text):
@@ -58,6 +76,29 @@ def _os_from_software(value: str | None) -> str | None:
     return None
 
 
+
+def _skip_reason(device: Device) -> str | None:
+    """Exclude inventory-only devices before OS or SSH driver selection."""
+    model = _normalize(device.platform)
+    description = _normalize(device.description)
+    role = _normalize(device.role)
+    metadata = " ".join((model, description, role))
+
+    if re.search(r"\b(?:cisco )?ucs\b|\bunified computing system\b", metadata):
+        return "Excluded: UCS / compute infrastructure"
+    if re.search(r"\b(?:unified communications manager|call\s?manager|cucm)\b", metadata):
+        return "Excluded: Call Manager / CUCM"
+    if re.search(r"\b(?:voice gateway|analog voice gateway|vg(?:3x0|3\d{2}|4\d{2}))\b", metadata):
+        return "Excluded: voice gateway"
+    if re.search(r"\b(?:firepower management center|secure firewall management center)\b", metadata):
+        return "Excluded: firewall management appliance (not FTD)"
+    if re.search(r"\bapic\b|\bapplication policy infrastructure controller\b", metadata):
+        return "Excluded: ACI APIC"
+    if re.search(r"\bmcu\b|\bmultipoint control unit\b", metadata):
+        return "Excluded: MCU"
+    return None
+
+
 def _detect_os(device: Device) -> str | None:
     # Inventory software information is preferable to a model guess.
     for value in (device.os_type, device.description):
@@ -65,6 +106,15 @@ def _detect_os(device: Device) -> str | None:
             return match
 
     model = _normalize(device.platform)
+
+    # ASA chassis names can be resolved without a reported software image.
+    if re.search(r"\b(?:cisco )?asa\b|\basa\s*55\d{2}", model):
+        return "asa"
+
+    # A Firepower chassis is not proof of its installed software. If the
+    # inventory has no explicit OS, use the documented configurable default.
+    if re.search(r"\bfirepower\b|\bfire\s*power\b", model):
+        return FIREPOWER_DEFAULT_OS
 
     # Conservative fallbacks for model families with a known OS.
     if "nexus" in model or re.search(r"\bn[3579]k\b", model):
@@ -93,12 +143,15 @@ def _detect_os(device: Device) -> str | None:
     return None
 
 
-def _detect_role(device: Device) -> str:
+def _detect_role(device: Device, os_family: str) -> str:
     """Use inventory family/role first, then a conservative model fallback.
 
     Do not guess 'switch' merely because a device uses IOS XE: IOS XE runs
     on routers too. Both roles are intentionally allowed to be unknown.
     """
+    if os_family in ("asa", "ftd"):
+        return "firewall"
+
     inventory_role = _normalize(device.role)
     is_router = bool(re.search(r"\brouters?\b", inventory_role))
     is_switch = bool(re.search(r"\bswitch(?:es)?\b", inventory_role))
@@ -135,17 +188,24 @@ def _detect_role(device: Device) -> str:
 
 def detect_platform(device: Device) -> PlatformInfo:
     """Resolve platform info once per device, before selecting commands."""
+    if reason := _skip_reason(device):
+        raise DeviceSkipped(reason)
+
     os_family = _detect_os(device)
     if os_family is None:
-        raise ValueError(
-            f"Cannot detect OS for {device.hostname}: "
-            f"platform={device.platform!r}, os_type={device.os_type!r}, "
-            f"description={device.description!r}"
+        if "firepower" in _normalize(device.platform):
+            raise DeviceSkipped(
+                "Unsupported/ambiguous: Firepower OS not identified "
+                "(could be ASA or FTD)"
+            )
+        raise DeviceSkipped(
+            "Unsupported OS/platform: "
+            f"platform={device.platform!r}, os_type={device.os_type!r}"
         )
 
     return PlatformInfo(
         os_family=os_family,
         netmiko_type=NETMIKO_DRIVERS[os_family],
         command_profile=COMMAND_PROFILES[os_family],
-        role=_detect_role(device),
+        role=_detect_role(device, os_family),
     )

@@ -7,7 +7,7 @@ from models import Device
 from platform_detection import detect_platform
 
 PROFILE_DIR = Path(__file__).parent / "command_profiles"
-ROLES = {"router", "switch", "unknown"}
+ROLES = {"router", "switch", "firewall", "unknown"}
 
 
 def determine_profile(device: Device) -> str:
