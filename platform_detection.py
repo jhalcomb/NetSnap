@@ -47,6 +47,14 @@ def _os_from_software(value: str | None) -> str | None:
         return "iosxe"
     if re.search(r"\bios\b", text):
         return "ios"
+
+    # SolarWinds Orion.Nodes.IOSImage is usually an *image identifier*,
+    # not a friendly OS name. These patterns are for recognizable Cisco
+    # image families. Don't classify a device from UNIVERSALK9 alone.
+    if re.search(r"\b(?:x86\s*64\s*linux\s*iosd|cat3k\s*caa|cat9k\s*iosxe)\b", text):
+        return "iosxe"
+    if re.search(r"\b(?:c2960[a-z0-9]*|c3750[a-z0-9]*|c2900|vg3x0|vg310|vg350)\b", text):
+        return "ios"
     return None
 
 
@@ -64,14 +72,21 @@ def _detect_os(device: Device) -> str | None:
     if re.search(r"\b(?:asr\s*9(?:00[016]|9\d{2})|xrv?\d*)\b", model):
         return "iosxr"
     if (
-        re.search(r"\bc9\d{3}\b", model)
+        # The Catalyst 8000 edge family and ISR 43xx/44xx run IOS XE.
+        re.search(r"\b(?:catalyst\s+c?83\d{2}|c83\d{2}|(?:43|44)\d{2}\s*isr|vg450)\b", model)
+        or re.search(r"\bc9\d{3}\b", model)
         or re.search(r"\bcatalyst\s+9\d{3}\b", model)
         or re.search(r"\bc(?:3650|3850)\b", model)
         or re.search(r"\b(?:isr\s*4\d{3}|asr\s*1\d{3}|csr\s*1000v|c8kv|c8000v)\b", model)
     ):
         return "iosxe"
     if (
-        re.search(r"\bc(?:2960|3560|3750)[a-z0-9]*\b", model)
+        # SolarWinds sometimes reports a generic stack family rather than
+        # a specific chassis model.
+        re.search(r"\bcatalyst\s+(?:29xx|37xx)\s*stack\b", model)
+        or re.search(r"\b(?:cisco\s+)?2921k9\b", model)
+        or re.search(r"\b(?:vg310|vg350|vg3x0)\b", model)
+        or re.search(r"\bc(?:2960|3560|3750)[a-z0-9]*\b", model)
         or re.search(r"\bcatalyst\s+(?:2960|3560|3750)\b", model)
     ):
         return "ios"
@@ -96,7 +111,9 @@ def _detect_role(device: Device) -> str:
         re.search(r"\b(?:isr|asr|csr)\b", model)
         or re.search(r"\b(?:isr|asr|csr)\d", model)
         or re.search(r"\b(?:c8kv|c8000v|xrv\d*|xr\d*)\b", model)
-        or re.search(r"\bcatalyst\s+8\d{3}\b", model)
+        or re.search(r"\bcatalyst\s+c?8\d{3}\b", model)
+        or re.search(r"\b(?:43|44)\d{2}\s*isr\b", model)
+        or re.search(r"\b(?:cisco\s+)?2921k9\b", model)
     ):
         return "router"
 
@@ -107,6 +124,7 @@ def _detect_role(device: Device) -> str:
         or re.search(r"\bc9\d{3}\b", model)
         or re.search(r"\bc(?:1000|2960|3560|3650|3750|3850)[a-z0-9]*\b", model)
         or re.search(r"\bcatalyst\s+(?:1\d{3}|2\d{3}|3\d{3}|9\d{3})\b", model)
+        or re.search(r"\bcatalyst\s+(?:29xx|37xx|38xx)\s*stack\b", model)
         or re.search(r"\bws\s*c(?:2\d{3}|3\d{3})\b", model)
     ):
         return "switch"

@@ -72,6 +72,38 @@ class PlatformDetectionTests(unittest.TestCase):
         self.assertIn("show switch", switch)
         self.assertNotIn("show ip bgp summary", switch)
 
+
+    def test_solarwinds_image_names_and_platforms(self):
+        # Examples taken from the SolarWinds operational report.
+        cases = [
+            ("Cisco Catalyst 29xxStack", "C2960S-UNIVERSALK9-M", "ios", "switch"),
+            ("Catalyst 37xx Stack", "C3750-IPSERVICESK9-M", "ios", "switch"),
+            ("Cisco Catalyst 38xx stack", "CAT3K_CAA-UNIVERSALK9-M", "iosxe", "switch"),
+            ("Cisco 2921K9", "C2900-UNIVERSALK9-M", "ios", "router"),
+            ("Catalyst 8300-1N1S-6T", "X86_64_LINUX_IOSD-UNIVERSALK9-M", "iosxe", "router"),
+            ("Cisco Catalyst C8300-1N1S-4T2X", "X86_64_LINUX_IOSD-UNIVERSALK9-M", "iosxe", "router"),
+            ("Cisco 4431 ISR", "X86_64_LINUX_IOSD-UNIVERSALK9-M", "iosxe", "router"),
+            ("Cisco 4331 ISR", "X86_64_LINUX_IOSD-UNIVERSALK9-M", "iosxe", "router"),
+            ("VG310", "VG3X0-UNIVERSALK9-M", "ios", "unknown"),
+            ("VG350", "VG350-UNIVERSALK9-M", "ios", "unknown"),
+            ("Cisco VG450 Analog Voice Gateway", "X86_64_LINUX_IOSD-UNIVERSALK9-M", "iosxe", "unknown"),
+        ]
+        for model, image, expected_os, expected_role in cases:
+            with self.subTest(model=model):
+                info = detect_platform(dev("SolarWindsNode", model, image))
+                self.assertEqual(info.os_family, expected_os)
+                self.assertEqual(info.role, expected_role)
+                self.assertEqual(info.netmiko_type, "cisco_ios")
+
+    def test_other_appliances_do_not_get_a_false_ios_match(self):
+        # SolarWinds also inventories management servers and security appliances.
+        for model in ("Cisco Unified Communications Manager", "APIC Server M2",
+                      "Cisco FirePOWER 1010 Security Appliance", "Firepower 2130",
+                      "Cisco ASA 5505", "Cisco MCU 4505"):
+            with self.subTest(model=model):
+                with self.assertRaisesRegex(ValueError, "Cannot detect OS"):
+                    detect_platform(dev("NotIOS", model))
+
     def test_unknown_os_fails_instead_of_guessing(self):
         device = dev("Unknown", "Mystery 123")
         with self.assertRaisesRegex(ValueError, "Cannot detect OS"):
