@@ -16,6 +16,12 @@ class Device:
     serial: str | None = None
     role: str | None = None
     source: str = ""
+    description: str | None = None
+
+    # Populated after centralized platform classification.
+    detected_os: str | None = None
+    detected_role: str | None = None
+    netmiko_driver: str | None = None
 
     command_results: list[CommandResult] = field(
         default_factory=list

@@ -1,0 +1,5 @@
+# Safe, common commands when the device role is unknown.
+commands:
+  - show version
+  - show inventory
+  - show ip interface brief

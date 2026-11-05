@@ -2,8 +2,12 @@ commands:
   - show version
   - show inventory
   - show interface brief
-  - show port-channel summary
-  - show vpc
+  - show ip route
   - show cdp neighbors
-  - show spanning-tree summary
   - show logging last 20
+
+role_commands:
+  switch:
+    - show port-channel summary
+    - show vpc
+    - show spanning-tree summary

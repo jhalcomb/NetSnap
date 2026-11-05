@@ -80,6 +80,18 @@
         <td>{{ d.os_type }}</td>
     </tr>
     <tr>
+        <td><strong>Detected OS:</strong></td>
+        <td>{{ d.detected_os or "Unknown" }}</td>
+    </tr>
+    <tr>
+        <td><strong>Detected Device Type:</strong></td>
+        <td>{{ (d.detected_role or "unknown") | title }}</td>
+    </tr>
+    <tr>
+        <td><strong>Netmiko Driver:</strong></td>
+        <td>{{ d.netmiko_driver or "Unknown" }}</td>
+    </tr>
+    <tr>
         <td><strong>Serial Number:</strong></td>
         <td>{{ d.serial }}</td>
     </tr>

@@ -1,0 +1,5 @@
+commands:
+  - show version
+  - show inventory
+  - show ipv4 interface brief
+  - show route

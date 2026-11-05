@@ -20,31 +20,14 @@ from report_builder.html import (
     create_device_html,
     create_toc,
 )
-from command_profiles import (
-    get_commands_for_device,
-)
+from command_profiles import load_profile
+from platform_detection import detect_platform
 
 STOP_EVENT = Event()
 
 # ----------------------------------------------------------------------
 # SSH / Netmiko
 # ----------------------------------------------------------------------
-
-def determine_netmiko_type(
-    device: Device
-) -> str:
-
-    os_type = (
-        device.os_type or ""
-    ).lower()
-
-    if "nx-os" in os_type:
-        return "cisco_nxos"
-
-    if "ios xr" in os_type:
-        return "cisco_xr"
-
-    return "cisco_ios"
 
 def get_inventory_credentials(
     ssh_creds: Credentials
@@ -72,11 +55,12 @@ def collect_commands(
     commands: list[str],
     username: str,
     password: str,
+    netmiko_type: str,
 ) -> None:
     """SSH to one device and collect command output."""
 
     connection_params = {
-        "device_type": determine_netmiko_type(device),
+        "device_type": netmiko_type,
         "host": device.ip,
         "username": username,
         "password": password,
@@ -128,17 +112,24 @@ def process_device(
     )
 
 
-    device_commands = (
-    get_commands_for_device(
-        device
+    platform_info = detect_platform(device)
+    device.detected_os = platform_info.os_family
+    device.detected_role = platform_info.role
+    device.netmiko_driver = platform_info.netmiko_type
+    device_commands = load_profile(platform_info.command_profile, platform_info.role)
+
+    print(
+        f"Detected {device.hostname}: {platform_info.os_family}, "
+        f"{platform_info.role} "
+        f"({platform_info.netmiko_type}, {platform_info.command_profile})"
     )
-)
 
     collect_commands(
         device,
         device_commands,
         username,
         password,
+        platform_info.netmiko_type,
     )
 
     if STOP_EVENT.is_set():

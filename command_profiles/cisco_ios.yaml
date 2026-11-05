@@ -1,0 +1,20 @@
+# IOS and IOS XE use the same Netmiko driver. Router/switch role only
+# supplements these common read-only commands.
+commands:
+  - show version
+  - show inventory
+  - show ip interface brief
+  - show ip route
+  - show ip arp
+  - show cdp neighbors
+  - show logging
+
+role_commands:
+  router:
+    - show ip ospf neighbor
+    - show ip bgp summary
+  switch:
+    - show interfaces status
+    - show spanning-tree summary
+    - show etherchannel summary
+    - show switch

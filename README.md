@@ -119,6 +119,36 @@ Select inventory source >
 
 Inventory credentials can optionally be different from SSH credentials.
 
+## Platform detection
+
+NetSnap centralizes platform detection in `platform_detection.py`. Every inventory
+provider populates the `Device` model with the available platform, software,
+and role metadata. `detect_platform(device)` returns:
+
+- `os_family`: `ios`, `iosxe`, `nxos`, or `iosxr`
+- `netmiko_type`: SSH driver chosen **only** by the OS
+- `role`: `router`, `switch`, or `unknown`, chosen from the inventory role,
+  otherwise a conservative model-name heuristic
+- `command_profile`: the OS-specific YAML file
+
+Commands are defined under `commands:` (always collected) and optional
+`role_commands.router:` / `role_commands.switch:` groups in the same YAML file.
+When role is unknown, NetSnap still runs common commands such as `show ip route`.
+Detected OS, role, and driver are also shown in each device HTML report.
+Missing OS information still causes a clear error rather than an unsafe driver
+fallback. An inventory's category is preferred over role guesses from the model.
+
+Catalyst Center supplies `family`, `softwareType`, and `platformId`. SolarWinds
+supplies `MachineType`, `IOSImage`, and `Description`; a model heuristic can fill
+in router/switch when no explicit role is provided. Hardware series can be
+ambiguous, so adjust the model rules or provide a trusted role when necessary.
+
+Tests (no network connection required):
+
+```bash
+python -m unittest discover -s tests -v
+```
+
 ## Generated Reports
 
 Reports are written to:
@@ -203,3 +233,20 @@ Possible enhancements:
 ## License
 
 MIT License
+
+## Platform detection (OS-only)
+
+NetSnap resolves the network operating system from inventory metadata or a
+known model family. This selects the Netmiko driver and one command profile
+per OS; router/switch roles do **not** influence command selection.
+
+| OS | Netmiko driver | Command profile |
+|---|---|---|
+| IOS / IOS XE | `cisco_ios` | `cisco_ios.yaml` |
+| NX-OS | `cisco_nxos` | `cisco_nexus.yaml` |
+| IOS XR | `cisco_xr` | `cisco_iosxr.yaml` |
+
+The IOS/IOS XE profile intentionally includes routing and switching commands.
+Some commands may be unsupported on a particular device and return CLI error
+text; this is not a connection failure. Unknown platforms are rejected rather
+than silently assumed to be IOS.

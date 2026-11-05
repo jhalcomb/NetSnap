@@ -41,6 +41,7 @@ class SolarWindsInventory(InventoryBase):
             N.MachineType,
             N.Vendor,
             N.IOSImage,
+            N.Description,
             N.Status,
             N.SysName,
             N.NodeID,
@@ -61,7 +62,9 @@ class SolarWindsInventory(InventoryBase):
                 Device(
                     hostname=row["Caption"],
                     ip=row["IPAddress"],
-                    platform=row["MachineType"],
+                    platform=row["MachineType"] or "UNKNOWN",
+                    os_type=row.get("IOSImage"),
+                    description=row.get("Description"),
                     source="SolarWinds",
                 )
             )
